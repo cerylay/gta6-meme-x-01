@@ -1,52 +1,46 @@
-// gta6-meme-x-01 entry for @cerylay (fresh build, 2026-11-19).
+// gta6-meme-x-01 entry for @cerylay (v3) — Node 22, standard library only.
 //
-// The entry is the X post itself: the meme (meme.png, made by the agent in
-// this session) was posted from @cerylay30 with make.fun, @makefunai and the
-// play code in its text, and POST.json at the repository root names that
-// post's address. All this program has to do is hand POST.json to the gate.
+// The program's only job is to hand POST.json to the gate. The entry itself
+// is the X post named in POST.json: a Leonida Airlines boarding pass meme,
+// posted from @cerylay30, with make.fun's ghost as the passenger photo, the
+// mark as the airline logo, and the make.fun pitch in the footer.
+// Nothing this program writes about the post is judged: the house reads
+// the post itself from X (its first picture and its text).
 //
-// Node 22, standard library only. No network, no wall clock, no files
-// outside the repository: the two runs of an entry write the same bytes.
-//
-// Run the way the grader does:
+// Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR
+// stand in for /bot and /output:
 //   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? '/bot';
-const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? "/bot";
+const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+const POST_FILE = "POST.json";
 
-const sourcePath = join(BOT_DIR, 'POST.json');
-const raw = readFileSync(sourcePath, 'utf8');
-
-let post;
-try {
-  post = JSON.parse(raw);
-} catch {
-  console.error('POST.json is not valid JSON');
-  process.exit(1);
+// The gate only accepts an X post address: x.com or twitter.com (with an
+// optional www./mobile. prefix), /status/ (or /statuses/, /i/web/status/),
+// and an id of digits only. Anything else is refused before grading, so
+// check the shape here instead of handing the gate a bad address.
+function isXPostUrl(url: string): boolean {
+  const m = /^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/(?:[^/]+\/(?:status|statuses)|i\/web\/status)\/(\d+)\/?(?:[?#].*)?$/.exec(url);
+  if (!m) return false;
+  // The id must fit in 64 bits; compare as a BigInt, never as a string.
+  return BigInt(m[1]) < 2n ** 64n;
 }
 
-if (typeof post !== 'object' || post === null || typeof post.url !== 'string') {
-  console.error('POST.json must be an object with a string "url" field');
+const raw = readFileSync(join(BOT_DIR, POST_FILE), "utf8");
+const post: unknown = JSON.parse(raw);
+if (typeof post !== "object" || post === null || typeof (post as { url?: unknown }).url !== "string") {
+  console.error(`${POST_FILE} must be a JSON object with a url string`);
   process.exit(1);
 }
-
-if (!/^https?:\/\/(x\.com|twitter\.com)\/\w+\/status\/(\d+)$/.test(post.url)) {
-  console.error(`POST.json url does not look like an X post address: ${post.url}`);
-  process.exit(1);
-}
-
-// An X status id is a 19-digit snowflake: compare it as a BigInt against
-// 2^63 - 1, never as a string against "18446744073709551615" (a string
-// comparison against the 2^64-1 constant is the wrong bound and the wrong
-// type, and it misjudges 19-digit ids).
-const statusId = post.url.match(/\/status\/(\d+)$/)[1];
-if (BigInt(statusId) >= 2n ** 63n) {
-  console.error(`POST.json status id is out of range: ${statusId}`);
+const url = (post as { url: string }).url;
+if (!isXPostUrl(url)) {
+  console.error(`${POST_FILE} url must be an X post address, e.g. https://x.com/<handle>/status/<id>`);
   process.exit(1);
 }
 
 mkdirSync(OUTPUT_DIR, { recursive: true });
-writeFileSync(join(OUTPUT_DIR, 'POST.json'), `${JSON.stringify(post)}\n`, 'utf8');
+writeFileSync(join(OUTPUT_DIR, POST_FILE), JSON.stringify(post));
+console.log(`wrote ${POST_FILE} for ${url}`);
